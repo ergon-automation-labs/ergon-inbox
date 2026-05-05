@@ -13,11 +13,7 @@ defmodule BotArmyInbox.NATS.Consumer do
     Subjects.inbox_message_list(),
     Subjects.inbox_message_ack(),
     Subjects.inbox_message_count(),
-    Subjects.inbox_message_reply(),
-    Subjects.bridge_inbox_list(),
-    Subjects.bridge_inbox_ack(),
-    Subjects.bridge_inbox_count(),
-    Subjects.bridge_inbox_reply()
+    Subjects.inbox_message_reply()
   ]
 
   @retry_connect_ms 5_000
@@ -106,27 +102,7 @@ defmodule BotArmyInbox.NATS.Consumer do
           {:error, reason} -> err(reason)
         end
 
-      "bridge.inbox.list" ->
-        tenant_id = payload["tenant_id"]
-        user_id = payload["user_id"]
-
-        case Store.list(tenant_id, user_id, payload) do
-          {:ok, items} -> ok(%{"messages" => items})
-          {:error, reason} -> err(reason)
-        end
-
       "inbox.message.ack" ->
-        case Store.ack(
-               payload["tenant_id"],
-               payload["user_id"],
-               payload["message_id"],
-               payload["new_status"]
-             ) do
-          {:ok, item} -> ok(%{"message_id" => item["message_id"], "status" => item["status"]})
-          {:error, reason} -> err(reason)
-        end
-
-      "bridge.inbox.ack" ->
         case Store.ack(
                payload["tenant_id"],
                payload["user_id"],
@@ -149,40 +125,7 @@ defmodule BotArmyInbox.NATS.Consumer do
             err(reason)
         end
 
-      "bridge.inbox.count" ->
-        case Store.count(payload["tenant_id"], payload["user_id"]) do
-          {:ok, counts} ->
-            ok(%{
-              "unread_total" => counts.unread_total,
-              "by_category" => counts.by_category
-            })
-
-          {:error, reason} ->
-            err(reason)
-        end
-
       "inbox.message.reply" ->
-        attrs = %{
-          "reply_text" => payload["reply_text"],
-          "reply_to_subject" => payload["reply_to_subject"],
-          "correlation_id" => payload["correlation_id"]
-        }
-
-        case Store.reply(payload["tenant_id"], payload["user_id"], payload["message_id"], attrs) do
-          {:ok, item} ->
-            ok(%{
-              "message_id" => item["message_id"],
-              "accepted" => true,
-              "routed_subject" =>
-                payload["reply_to_subject"] || item["source_subject"] || "inbox.reply.unrouted",
-              "correlation_id" => payload["correlation_id"]
-            })
-
-          {:error, reason} ->
-            err(reason)
-        end
-
-      "bridge.inbox.reply" ->
         attrs = %{
           "reply_text" => payload["reply_text"],
           "reply_to_subject" => payload["reply_to_subject"],
