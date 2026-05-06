@@ -107,7 +107,8 @@ defmodule BotArmyInbox.NATS.Consumer do
                payload["tenant_id"],
                payload["user_id"],
                payload["message_id"],
-               payload["new_status"]
+               payload["new_status"],
+               %{"idempotency_key" => payload["idempotency_key"]}
              ) do
           {:ok, item} -> ok(%{"message_id" => item["message_id"], "status" => item["status"]})
           {:error, reason} -> err(reason)
@@ -132,7 +133,13 @@ defmodule BotArmyInbox.NATS.Consumer do
           "correlation_id" => payload["correlation_id"]
         }
 
-        case Store.reply(payload["tenant_id"], payload["user_id"], payload["message_id"], attrs) do
+        case Store.reply(
+               payload["tenant_id"],
+               payload["user_id"],
+               payload["message_id"],
+               attrs,
+               %{"idempotency_key" => payload["idempotency_key"]}
+             ) do
           {:ok, item} ->
             ok(%{
               "message_id" => item["message_id"],
