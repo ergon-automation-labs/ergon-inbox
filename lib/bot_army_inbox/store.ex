@@ -64,9 +64,11 @@ defmodule BotArmyInbox.Store do
     items =
       state.messages
       |> Map.values()
-      |> Enum.filter(fn msg -> msg["tenant_id"] == tenant_id and msg["user_id"] == user_id end)
-      |> Enum.filter(fn msg -> is_nil(status_filter) or msg["status"] == status_filter end)
-      |> Enum.filter(fn msg -> is_nil(category_filter) or msg["category"] == category_filter end)
+      |> Enum.filter(fn msg ->
+        msg["tenant_id"] == tenant_id and msg["user_id"] == user_id and
+          (is_nil(status_filter) or msg["status"] == status_filter) and
+          (is_nil(category_filter) or msg["category"] == category_filter)
+      end)
       |> Enum.sort_by(&Map.get(&1, "created_at", ""), :desc)
       |> Enum.take(limit)
 

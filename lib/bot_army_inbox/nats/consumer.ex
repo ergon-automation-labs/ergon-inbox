@@ -85,77 +85,76 @@ defmodule BotArmyInbox.NATS.Consumer do
     end
   end
 
-  defp handle_request(topic, payload) do
-    case topic do
-      "inbox.message.create" ->
-        case Store.create(payload) do
-          {:ok, item} -> ok(%{"message_id" => item["message_id"], "status" => item["status"]})
-          {:error, reason} -> err(reason)
-        end
-
-      "inbox.message.list" ->
-        tenant_id = payload["tenant_id"]
-        user_id = payload["user_id"]
-
-        case Store.list(tenant_id, user_id, payload) do
-          {:ok, items} -> ok(%{"messages" => items})
-          {:error, reason} -> err(reason)
-        end
-
-      "inbox.message.ack" ->
-        case Store.ack(
-               payload["tenant_id"],
-               payload["user_id"],
-               payload["message_id"],
-               payload["new_status"],
-               %{"idempotency_key" => payload["idempotency_key"]}
-             ) do
-          {:ok, item} -> ok(%{"message_id" => item["message_id"], "status" => item["status"]})
-          {:error, reason} -> err(reason)
-        end
-
-      "inbox.message.count" ->
-        case Store.count(payload["tenant_id"], payload["user_id"]) do
-          {:ok, counts} ->
-            ok(%{
-              "unread_total" => counts.unread_total,
-              "by_category" => counts.by_category
-            })
-
-          {:error, reason} ->
-            err(reason)
-        end
-
-      "inbox.message.reply" ->
-        attrs = %{
-          "reply_text" => payload["reply_text"],
-          "reply_to_subject" => payload["reply_to_subject"],
-          "correlation_id" => payload["correlation_id"]
-        }
-
-        case Store.reply(
-               payload["tenant_id"],
-               payload["user_id"],
-               payload["message_id"],
-               attrs,
-               %{"idempotency_key" => payload["idempotency_key"]}
-             ) do
-          {:ok, item} ->
-            ok(%{
-              "message_id" => item["message_id"],
-              "accepted" => true,
-              "routed_subject" =>
-                payload["reply_to_subject"] || item["source_subject"] || "inbox.reply.unrouted",
-              "correlation_id" => payload["correlation_id"]
-            })
-
-          {:error, reason} ->
-            err(reason)
-        end
-
-      _ ->
-        err("unsupported_subject")
+  defp handle_request("inbox.message.create", payload) do
+    case Store.create(payload) do
+      {:ok, item} -> ok(%{"message_id" => item["message_id"], "status" => item["status"]})
+      {:error, reason} -> err(reason)
     end
+  end
+
+  defp handle_request("inbox.message.list", payload) do
+    case Store.list(payload["tenant_id"], payload["user_id"], payload) do
+      {:ok, items} -> ok(%{"messages" => items})
+      {:error, reason} -> err(reason)
+    end
+  end
+
+  defp handle_request("inbox.message.ack", payload) do
+    case Store.ack(
+           payload["tenant_id"],
+           payload["user_id"],
+           payload["message_id"],
+           payload["new_status"],
+           %{"idempotency_key" => payload["idempotency_key"]}
+         ) do
+      {:ok, item} -> ok(%{"message_id" => item["message_id"], "status" => item["status"]})
+      {:error, reason} -> err(reason)
+    end
+  end
+
+  defp handle_request("inbox.message.count", payload) do
+    case Store.count(payload["tenant_id"], payload["user_id"]) do
+      {:ok, counts} ->
+        ok(%{
+          "unread_total" => counts.unread_total,
+          "by_category" => counts.by_category
+        })
+
+      {:error, reason} ->
+        err(reason)
+    end
+  end
+
+  defp handle_request("inbox.message.reply", payload) do
+    attrs = %{
+      "reply_text" => payload["reply_text"],
+      "reply_to_subject" => payload["reply_to_subject"],
+      "correlation_id" => payload["correlation_id"]
+    }
+
+    case Store.reply(
+           payload["tenant_id"],
+           payload["user_id"],
+           payload["message_id"],
+           attrs,
+           %{"idempotency_key" => payload["idempotency_key"]}
+         ) do
+      {:ok, item} ->
+        ok(%{
+          "message_id" => item["message_id"],
+          "accepted" => true,
+          "routed_subject" =>
+            payload["reply_to_subject"] || item["source_subject"] || "inbox.reply.unrouted",
+          "correlation_id" => payload["correlation_id"]
+        })
+
+      {:error, reason} ->
+        err(reason)
+    end
+  end
+
+  defp handle_request(_, _payload) do
+    err("unsupported_subject")
   end
 
   defp decode(body) do

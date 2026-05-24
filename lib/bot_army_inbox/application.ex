@@ -1,4 +1,10 @@
 defmodule BotArmyInbox.Application do
+  @moduledoc """
+  Supervision tree for the Inbox bot.
+
+  Starts the Store and NATS Consumer services.
+  """
+
   use Application
   require Logger
 
