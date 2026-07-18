@@ -1,7 +1,7 @@
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 
-.PHONY: help deps test check clean release publish-release push-and-publish
+.PHONY: help deps test check clean release publish-release push-and-publish bump-version compile
 
 help:
 	@echo "Bot Army Inbox"
@@ -13,8 +13,20 @@ help:
 	@echo "  make publish-release  - Package and publish GitHub release"
 	@echo "  make push-and-publish - Push branch then publish release"
 
+compile:
+	@LOG_FILE="/tmp/compile-inbox-$$(date +%s).log"; \
+	echo "Compiling inbox and logging to $$LOG_FILE..."; \
+	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Compilation log: $$LOG_FILE"
+
 deps:
 	$(MIX) deps.get
+
+compile:
+	@LOG_FILE="/tmp/compile-inbox-$$(date +%s).log"; \
+	echo "Compiling inbox and logging to $$LOG_FILE..."; \
+	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
+	echo "✓ Compilation log: $$LOG_FILE"
 
 test:
 	$(MIX) test
@@ -72,3 +84,10 @@ publish-release: release
 
 push-and-publish:
 	@git push && $(MAKE) publish-release
+
+bump-version:
+	@if [ -z "$(BUMP)" ]; then echo "Usage: make bump-version BUMP=major|minor|patch"; exit 1; fi
+	@OLD=$$(grep 'version:' mix.exs | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/'); \
+	bash $(SCRIPTS_DIRECTORY)/bump_version.sh mix.exs $(BUMP) > /dev/null; \
+	NEW=$$(grep 'version:' mix.exs | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/'); \
+	echo "✓ Bumped: $$OLD → $$NEW"
