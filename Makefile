@@ -1,7 +1,7 @@
 MIX ?= /Users/abby/.local/share/mise/shims/mix
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 
-.PHONY: help deps test check clean release publish-release push-and-publish bump-version compile
+.PHONY: help deps test check clean release publish-release push-and-publish compile
 
 help:
 	@echo "Bot Army Inbox"
@@ -85,19 +85,12 @@ publish-release: release
 push-and-publish:
 	@git push && $(MAKE) publish-release
 
-bump-version:
-	@if [ -z "$(BUMP)" ]; then echo "Usage: make bump-version BUMP=major|minor|patch"; exit 1; fi
-	@OLD=$$(grep 'version:' mix.exs | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/'); \
-	bash $(SCRIPTS_DIRECTORY)/bump_version.sh mix.exs $(BUMP) > /dev/null; \
-	NEW=$$(grep 'version:' mix.exs | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/'); \
-	echo "✓ Bumped: $$OLD → $$NEW"
 
-push: test compile credo
-	@echo "✅ All validations passed"
-	@echo "$$(date +%s)" > .push-validated
-	@echo "✓ Proof-of-validation created"
-	@$(MAKE) git-push
-
-
-git-push:
-	@git push origin main 2>&1 | tail -3
+# Shared targets (push, credo, pre-push-cleanup, bump-version, git-push).
+# Defined once in bot_army_infra so they cannot drift per repo.
+BOT_ARMY_COMMON_MK := $(abspath $(CURDIR)/../bot_army_infra/make/common.mk)
+ifeq ($(wildcard $(BOT_ARMY_COMMON_MK)),)
+$(warning bot_army_infra not found at $(BOT_ARMY_COMMON_MK) - shared targets unavailable)
+else
+include $(BOT_ARMY_COMMON_MK)
+endif
