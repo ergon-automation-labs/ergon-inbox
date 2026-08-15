@@ -13,7 +13,7 @@ help:
 	@echo "  make publish-release  - Package and publish GitHub release"
 	@echo "  make push-and-publish - Push branch then publish release"
 
-compile:
+_compile-impl:
 	@LOG_FILE="/tmp/compile-inbox-$$(date +%s).log"; \
 	echo "Compiling inbox and logging to $$LOG_FILE..."; \
 	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
@@ -21,12 +21,6 @@ compile:
 
 deps:
 	$(MIX) deps.get
-
-compile:
-	@LOG_FILE="/tmp/compile-inbox-$$(date +%s).log"; \
-	echo "Compiling inbox and logging to $$LOG_FILE..."; \
-	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Compilation log: $$LOG_FILE"
 
 test:
 	$(MIX) test
