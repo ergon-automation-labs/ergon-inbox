@@ -14,10 +14,7 @@ help:
 	@echo "  make push-and-publish - Push branch then publish release"
 
 _compile-impl:
-	@LOG_FILE="/tmp/compile-inbox-$$(date +%s).log"; \
-	echo "Compiling inbox and logging to $$LOG_FILE..."; \
-	$(MIX) compile 2>&1 | tee "$$LOG_FILE"; \
-	echo "✓ Compilation log: $$LOG_FILE"
+	$(MIX) compile
 
 deps:
 	$(MIX) deps.get
