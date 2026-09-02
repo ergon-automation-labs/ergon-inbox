@@ -4,7 +4,7 @@ defmodule BotArmyInbox.MixProject do
   def project do
     [
       app: :bot_army_inbox,
-      version: "0.1.8",
+      version: "0.1.9",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -21,7 +21,7 @@ defmodule BotArmyInbox.MixProject do
   defp deps do
     [
       {:bot_army_library_core, path: "../bot_army_library_core"},
-      {:bot_army_library_runtime, path: "../bot_army_library_runtime"},
+      {:bot_army_library_runtime, path: "../bot_army_library_runtime", override: true},
       {:jason, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
