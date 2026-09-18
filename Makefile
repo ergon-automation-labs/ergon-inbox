@@ -1,4 +1,3 @@
-MIX ?= /Users/abby/.local/share/mise/shims/mix
 SCRIPTS_DIRECTORY ?= $(abspath $(CURDIR)/../scripts)
 
 .PHONY: help deps test check clean release publish-release push-and-publish compile
