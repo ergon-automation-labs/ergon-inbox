@@ -39,7 +39,7 @@ test-release-smoke:
 	@echo "==============================================="
 	@echo "Running release smoke test"
 	@echo "==============================================="
-	@RELEASE_NAME=inbox_bot NATS_SERVERS=nats://localhost:4224 \
+	@RELEASE_NAME=bot_army_inbox NATS_SERVERS=nats://localhost:4224 \
 		bash $(SCRIPTS_DIRECTORY)/test_release_smoke.sh
 
 # Detect if branch touches responder, NATS consumer, or bridge envelope code.
