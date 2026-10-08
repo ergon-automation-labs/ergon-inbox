@@ -72,6 +72,7 @@ publish-release: release
 			--draft=false; \
 	fi
 
+	@$(MAKE) publish-deploy-event TARGET=both
 push-and-publish:
 	@git push && $(MAKE) publish-release
 
