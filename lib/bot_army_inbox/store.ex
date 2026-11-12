@@ -14,16 +14,17 @@ defmodule BotArmyInbox.Store do
 
   def create(message), do: GenServer.call(__MODULE__, {:create, message})
 
-  def list(tenant_id, user_id, filters \\ %{}),
-    do: GenServer.call(__MODULE__, {:list, tenant_id, user_id, filters})
+  def list(tenant_id, recipient_id, filters \\ %{}),
+    do: GenServer.call(__MODULE__, {:list, tenant_id, recipient_id, filters})
 
-  def ack(tenant_id, user_id, message_id, new_status, opts \\ %{}),
-    do: GenServer.call(__MODULE__, {:ack, tenant_id, user_id, message_id, new_status, opts})
+  def ack(tenant_id, recipient_id, message_id, new_status, opts \\ %{}),
+    do: GenServer.call(__MODULE__, {:ack, tenant_id, recipient_id, message_id, new_status, opts})
 
-  def count(tenant_id, user_id), do: GenServer.call(__MODULE__, {:count, tenant_id, user_id})
+  def count(tenant_id, recipient_id),
+    do: GenServer.call(__MODULE__, {:count, tenant_id, recipient_id})
 
-  def reply(tenant_id, user_id, message_id, attrs, opts \\ %{}),
-    do: GenServer.call(__MODULE__, {:reply, tenant_id, user_id, message_id, attrs, opts})
+  def reply(tenant_id, recipient_id, message_id, attrs, opts \\ %{}),
+    do: GenServer.call(__MODULE__, {:reply, tenant_id, recipient_id, message_id, attrs, opts})
 
   def reset, do: GenServer.call(__MODULE__, :reset)
 
@@ -39,8 +40,8 @@ defmodule BotArmyInbox.Store do
   def handle_call({:create, message}, _from, state) do
     idempotency_key = message["idempotency_key"]
     tenant_id = message["tenant_id"]
-    user_id = message["user_id"]
-    op_scope = idempotency_scope("create", tenant_id, user_id, idempotency_key)
+    recipient_id = message["recipient_id"] || message["user_id"]
+    op_scope = idempotency_scope("create", tenant_id, recipient_id, idempotency_key)
     fingerprint = fingerprint_create(message)
 
     case get_idempotent_result(state, op_scope, fingerprint) do
@@ -56,7 +57,7 @@ defmodule BotArmyInbox.Store do
   end
 
   @impl true
-  def handle_call({:list, tenant_id, user_id, filters}, _from, state) do
+  def handle_call({:list, tenant_id, recipient_id, filters}, _from, state) do
     status_filter = Map.get(filters, "status")
     category_filter = Map.get(filters, "category")
     limit = Map.get(filters, "limit", 50)
@@ -65,7 +66,7 @@ defmodule BotArmyInbox.Store do
       state.messages
       |> Map.values()
       |> Enum.filter(fn msg ->
-        msg["tenant_id"] == tenant_id and msg["user_id"] == user_id and
+        msg["tenant_id"] == tenant_id and msg["user_id"] == recipient_id and
           (is_nil(status_filter) or msg["status"] == status_filter) and
           (is_nil(category_filter) or msg["category"] == category_filter)
       end)
@@ -76,9 +77,9 @@ defmodule BotArmyInbox.Store do
   end
 
   @impl true
-  def handle_call({:ack, tenant_id, user_id, message_id, new_status, opts}, _from, state) do
+  def handle_call({:ack, tenant_id, recipient_id, message_id, new_status, opts}, _from, state) do
     idempotency_key = opts["idempotency_key"]
-    op_scope = idempotency_scope("ack", tenant_id, user_id, idempotency_key)
+    op_scope = idempotency_scope("ack", tenant_id, recipient_id, idempotency_key)
     fingerprint = fingerprint_ack(message_id, new_status)
 
     case get_idempotent_result(state, op_scope, fingerprint) do
@@ -89,16 +90,18 @@ defmodule BotArmyInbox.Store do
         {:reply, {:error, reason}, state}
 
       :miss ->
-        do_ack(tenant_id, user_id, message_id, new_status, state, op_scope, fingerprint)
+        do_ack(tenant_id, recipient_id, message_id, new_status, state, op_scope, fingerprint)
     end
   end
 
   @impl true
-  def handle_call({:count, tenant_id, user_id}, _from, state) do
+  def handle_call({:count, tenant_id, recipient_id}, _from, state) do
     items =
       state.messages
       |> Map.values()
-      |> Enum.filter(fn msg -> msg["tenant_id"] == tenant_id and msg["user_id"] == user_id end)
+      |> Enum.filter(fn msg ->
+        msg["tenant_id"] == tenant_id and msg["user_id"] == recipient_id
+      end)
 
     unread_total = Enum.count(items, &(&1["status"] == "unread"))
 
@@ -112,9 +115,9 @@ defmodule BotArmyInbox.Store do
   end
 
   @impl true
-  def handle_call({:reply, tenant_id, user_id, message_id, attrs, opts}, _from, state) do
+  def handle_call({:reply, tenant_id, recipient_id, message_id, attrs, opts}, _from, state) do
     idempotency_key = opts["idempotency_key"]
-    op_scope = idempotency_scope("reply", tenant_id, user_id, idempotency_key)
+    op_scope = idempotency_scope("reply", tenant_id, recipient_id, idempotency_key)
     fingerprint = fingerprint_reply(message_id, attrs)
 
     case get_idempotent_result(state, op_scope, fingerprint) do
@@ -125,7 +128,7 @@ defmodule BotArmyInbox.Store do
         {:reply, {:error, reason}, state}
 
       :miss ->
-        do_reply(tenant_id, user_id, message_id, attrs, state, op_scope, fingerprint)
+        do_reply(tenant_id, recipient_id, message_id, attrs, state, op_scope, fingerprint)
     end
   end
 
