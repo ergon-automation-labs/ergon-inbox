@@ -173,4 +173,32 @@ defmodule BotArmyInbox.StoreTest do
                %{"idempotency_key" => "idem-reply-conflict-1"}
              )
   end
+
+  test "a message outlives the process that made it" do
+    {:ok, created} =
+      Store.create(%{
+        "tenant_id" => "tenant-1",
+        "user_id" => "user-1",
+        "title" => "the roof is leaking",
+        "body" => "call the roofer"
+      })
+
+    supervisor = BotArmyInbox.Application.Supervisor
+    :ok = Supervisor.terminate_child(supervisor, Store)
+    {:ok, _pid} = Supervisor.restart_child(supervisor, Store)
+
+    # Nothing carries over in a map: the only way this comes back is the file.
+    {:ok, items} = Store.list("tenant-1", "user-1", %{})
+    assert [%{"message_id" => id, "status" => "unread"}] = Enum.filter(items, &(&1["message_id"] == created["message_id"]))
+    assert id == created["message_id"]
+
+    # An acknowledged message stays acknowledged across the same restart, or the screen would
+    # keep offering her the thing she already read.
+    {:ok, _} = Store.ack("tenant-1", "user-1", created["message_id"], "read", %{})
+    :ok = Supervisor.terminate_child(supervisor, Store)
+    {:ok, _pid} = Supervisor.restart_child(supervisor, Store)
+
+    {:ok, after_restart} = Store.list("tenant-1", "user-1", %{})
+    assert Enum.find(after_restart, &(&1["message_id"] == created["message_id"]))["status"] == "read"
+  end
 end

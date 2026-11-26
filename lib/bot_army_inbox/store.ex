@@ -1,14 +1,25 @@
 defmodule BotArmyInbox.Store do
   @moduledoc """
-  In-memory inbox state for initial Inbox Bot prototype.
+  The inbox store: messages a bot left for her, kept on disk.
+
+  It was an in-memory prototype, and a message lived only until the next restart — which happens
+  on every deploy. A place where bots leave her something to read cannot forget the message at
+  the first reboot, so the messages are kept in a dets table (a file, not a database) and loaded
+  back on start. If the file cannot be opened the store still starts, in memory, and says so in
+  the log; it never refuses to boot over its own storage.
   """
 
   use GenServer
+  require Logger
 
   @type message :: map()
   @type idempotency_entry :: %{fingerprint: binary(), result: map()}
   @type idempotency_cache :: %{String.t() => idempotency_entry}
-  @type state :: %{messages: %{String.t() => message()}, idempotency: idempotency_cache}
+  @type state :: %{
+          messages: %{String.t() => message()},
+          idempotency: idempotency_cache,
+          table: :dets.tab_name() | nil
+        }
 
   def start_link(opts \\ []), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -29,11 +40,33 @@ defmodule BotArmyInbox.Store do
   def reset, do: GenServer.call(__MODULE__, :reset)
 
   @impl true
-  def init(_opts), do: {:ok, %{messages: %{}, idempotency: %{}}}
+  def init(_opts) do
+    case open_table() do
+      {:ok, table} ->
+        {:ok, %{messages: load_messages(table), idempotency: %{}, table: table}}
+
+      {:error, reason} ->
+        Logger.error(
+          "[Inbox.Store] Could not open #{table_path()}: #{inspect(reason)}. " <>
+            "Messages will be kept in memory and lost on restart."
+        )
+
+        {:ok, %{messages: %{}, idempotency: %{}, table: nil}}
+    end
+  end
 
   @impl true
-  def handle_call(:reset, _from, _state) do
-    {:reply, :ok, %{messages: %{}, idempotency: %{}}}
+  def terminate(_reason, %{table: nil}), do: :ok
+
+  def terminate(_reason, %{table: table}) do
+    :dets.close(table)
+    :ok
+  end
+
+  @impl true
+  def handle_call(:reset, _from, state) do
+    if state.table, do: :dets.delete_all_objects(state.table)
+    {:reply, :ok, %{messages: %{}, idempotency: %{}, table: state.table}}
   end
 
   @impl true
@@ -144,6 +177,7 @@ defmodule BotArmyInbox.Store do
       |> Map.put("updated_at", now)
 
     messages = Map.put(state.messages, message_id, base)
+    keep(state, [base])
     next_state = put_idempotent_result(%{state | messages: messages}, op_scope, fingerprint, base)
     {:reply, {:ok, base}, next_state}
   end
@@ -158,6 +192,7 @@ defmodule BotArmyInbox.Store do
           now = DateTime.utc_now() |> DateTime.to_iso8601()
           updated = msg |> Map.put("status", new_status) |> Map.put("updated_at", now)
           messages = Map.put(state.messages, message_id, updated)
+          keep(state, [updated])
 
           next_state =
             put_idempotent_result(%{state | messages: messages}, op_scope, fingerprint, updated)
@@ -194,6 +229,7 @@ defmodule BotArmyInbox.Store do
             |> Map.put("replied_at", now)
 
           messages = Map.put(state.messages, message_id, updated)
+          keep(state, [updated])
 
           next_state =
             put_idempotent_result(%{state | messages: messages}, op_scope, fingerprint, updated)
@@ -253,5 +289,61 @@ defmodule BotArmyInbox.Store do
 
   defp new_message_id do
     "msg-" <> Integer.to_string(System.unique_integer([:positive, :monotonic]))
+  end
+
+  # ── the file ────────────────────────────────────────────────────────────────
+
+  @table :inbox_messages
+
+  defp table_path do
+    Path.join([data_dir(), "messages.dets"])
+  end
+
+  defp data_dir do
+    System.get_env("BOT_ARMY_INBOX_DATA_DIR") ||
+      Application.get_env(:bot_army_inbox, :data_dir) ||
+      Path.join(File.cwd!(), "data")
+  end
+
+  defp open_table do
+    path = table_path()
+    File.mkdir_p(data_dir())
+
+    case :dets.open_file(@table, file: String.to_charlist(path), auto_save: 5_000) do
+      {:ok, table} ->
+        {:ok, table}
+
+      {:error, {:not_a_dets_file, _}} ->
+        # A half-written file (the machine died mid-save) must not become a bot that cannot
+        # boot. Move it aside — it is evidence, not rubbish — and start a new one, once.
+        aside = "#{path}.corrupt-#{System.system_time(:second)}"
+        Logger.warning("[Inbox.Store] Unreadable dets file; moving it to #{aside}")
+        File.rename(path, aside)
+        :dets.open_file(@table, file: String.to_charlist(path), auto_save: 5_000)
+
+      error ->
+        error
+    end
+  catch
+    kind, reason -> {:error, {kind, reason}}
+  end
+
+  defp load_messages(table) do
+    :dets.foldl(fn {id, message}, acc -> Map.put(acc, id, message) end, %{}, table)
+  catch
+    kind, reason ->
+      Logger.error("[Inbox.Store] Could not read stored messages: #{inspect({kind, reason})}")
+      %{}
+  end
+
+  defp keep(%{table: nil}, _messages), do: :ok
+
+  defp keep(%{table: table}, messages) do
+    :dets.insert(table, Enum.map(messages, &{&1["message_id"], &1}))
+    :ok
+  catch
+    kind, reason ->
+      Logger.error("[Inbox.Store] Could not persist messages: #{inspect({kind, reason})}")
+      :ok
   end
 end

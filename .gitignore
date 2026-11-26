@@ -26,3 +26,9 @@ mix.lock
 _build_cursor_test/
 .push-validated
 .compile-hash
+
+.version_for_pre_push
+
+__pycache__/
+
+data/
