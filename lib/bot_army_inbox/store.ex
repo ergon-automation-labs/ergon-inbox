@@ -287,8 +287,18 @@ defmodule BotArmyInbox.Store do
     :erlang.term_to_binary({message_id, attrs_for_fingerprint})
   end
 
+  # An id that survives a restart.
+  #
+  # This was `System.unique_integer/1`, which counts from 1 in every VM: the first message
+  # after a deploy was `msg-1` again, a dets key that already held an older message, and the
+  # new one silently overwrote it (or, with the same key, looked like a duplicate the senders
+  # had made). Nothing about an id should depend on how long this process has been up, so the
+  # id is 72 random bits from the VM's own crypto — no clock, no counter, no restart to reason
+  # about.
+  @message_id_bytes 9
+
   defp new_message_id do
-    "msg-" <> Integer.to_string(System.unique_integer([:positive, :monotonic]))
+    "msg-" <> Base.url_encode64(:crypto.strong_rand_bytes(@message_id_bytes), padding: false)
   end
 
   # ── the file ────────────────────────────────────────────────────────────────

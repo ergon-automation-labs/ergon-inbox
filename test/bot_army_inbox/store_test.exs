@@ -39,6 +39,31 @@ defmodule BotArmyInbox.StoreTest do
     assert String.starts_with?(created["message_id"], "msg-")
   end
 
+  test "a generated message_id does not depend on how long this VM has been up" do
+    # This was System.unique_integer/1, which counts from 1 in every VM: the first message after
+    # a deploy was `msg-1` again — the same dets key as a message from before the restart, so the
+    # older row was silently replaced. The ids below are made by one VM, so what is asserted is
+    # what a restart cannot give them: no counter shape, and no repeat across many sends.
+    ids =
+      for n <- 1..200 do
+        {:ok, created} =
+          Store.create(%{
+            "tenant_id" => "tenant-1",
+            "user_id" => "user-1",
+            "title" => "message #{n}"
+          })
+
+        created["message_id"]
+      end
+
+    assert length(Enum.uniq(ids)) == 200
+    refute Enum.any?(ids, &Regex.match?(~r/^msg-\d+$/, &1)),
+           "a counter-shaped id repeats after a restart: #{Enum.take(ids, 3) |> inspect()}"
+
+    assert Enum.all?(ids, &String.starts_with?(&1, "msg-"))
+    assert Enum.all?(ids, &(String.length(&1) >= 16))
+  end
+
   test "create returns idempotency_conflict for same key with different payload" do
     base = %{
       "message_id" => "msg-1x",
